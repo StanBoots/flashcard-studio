@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vietnamese-English Interactive Flashcards</title>
+    <!-- Tailwind CSS for modern responsive layout and styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* Perspective and 3D Card Flip styles */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+        .card-inner {
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Pulse animation for completion state */
+        @keyframes float-celebrate {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-10px) scale(1.02); }
+        }
+        .animate-celebrate {
+            animation: float-celebrate 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between p-4 sm:p-6 lg:p-8">
+
+    <!-- Application Header -->
+    <header class="max-w-2xl mx-auto w-full flex flex-col gap-3 mb-4">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                    <span>🇻🇳</span> Flashcard Studio
+                </h1>
+                <p class="text-sm text-slate-500">Vietnamese / English Cloud Study Session</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="importBtn" class="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Import TSV
+                </button>
+
+                <button id="saveTsvBtn" class="px-3 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" title="Download current deck as timestamped TSV">
+                    <span>💾</span> Save TSV
+                </button>
+                
+                <button id="shuffleBtn" class="px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                    <span>🔀</span> Shuffle
+                </button>
+
+                <button id="audioSettingsToggleBtn" class="px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                    <span>🔊</span> Audio
+                </button>
+
+                <button id="resetBtn" class="px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors shadow-sm">
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Collapsible Audio Settings Panel -->
+        <div id="audioSettingsPanel" class="hidden bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-sm transition-all">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+                <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>🎧</span> Audio Playback Preferences
+                </span>
+                <span id="folderStatusBadge" class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                    ☁️ Connected to Cloud Audio (audio/)
+                </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Auto Play Toggle -->
+                <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div>
+                        <label for="autoPlayToggle" class="font-semibold text-slate-700 block">Auto-Play Audio</label>
+                        <span class="text-xs text-slate-400">Plays when Vietnamese side appears</span>
+                    </div>
+                    <input type="checkbox" id="autoPlayToggle" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer">
+                </div>
+
+                <!-- Repeat Count -->
+                <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div>
+                        <label for="repeatCountInput" class="font-semibold text-slate-700 block">Playbacks per View</label>
+                        <span class="text-xs text-slate-400">Number of times to play (1–10)</span>
+                    </div>
+                    <input type="number" id="repeatCountInput" min="1" max="10" value="1" class="w-16 p-1.5 text-center font-semibold border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <!-- Initial Delay (ms) -->
+                <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="initialDelayRange" class="font-semibold text-slate-700">Initial Delay</label>
+                        <span id="initialDelayLabel" class="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">0 ms</span>
+                    </div>
+                    <input type="range" id="initialDelayRange" min="0" max="2000" step="50" value="0" class="w-full accent-indigo-600 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0 ms</span>
+                        <span>1000 ms</span>
+                        <span>2000 ms</span>
+                    </div>
+                </div>
+
+                <!-- Delay Between Playbacks (ms) -->
+                <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="betweenDelayRange" class="font-semibold text-slate-700">Delay Between Repeats</label>
+                        <span id="betweenDelayLabel" class="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">500 ms</span>
+                    </div>
+                    <input type="range" id="betweenDelayRange" min="0" max="5000" step="100" value="500" class="w-full accent-indigo-600 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0 ms</span>
+                        <span>2500 ms</span>
+                        <span>5000 ms</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-2xl mx-auto w-full flex-1 flex flex-col items-center justify-center">
+
+        <!-- Progress Tracker -->
+        <div class="w-full mb-5">
+            <div class="flex justify-between items-center text-xs font-semibold text-slate-500 mb-2">
+                <span id="deckStatusText">Card 1 of 1</span>
+                <span id="learnedStatusText">Learned: 0 / 1</span>
+            </div>
+            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div id="progressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300 rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Mode Direction Toggle -->
+        <div class="mb-5 flex items-center gap-3 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+            <button id="modeVnEn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white transition-all shadow-sm">
+                Vietnamese → English
+            </button>
+            <button id="modeEnVn" class="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition-all">
+                English → Vietnamese
+            </button>
+        </div>
+
+        <!-- Flashcard Viewport -->
+        <div id="cardContainer" class="w-full perspective-1000 my-auto min-h-[320px] sm:min-h-[360px] cursor-pointer">
+            <div id="cardInner" class="card-inner relative w-full h-full transform-style-3d rounded-2xl shadow-xl bg-white border border-slate-100 flex flex-col justify-between p-6 sm:p-8 min-h-[320px] sm:min-h-[360px]">
+                
+                <!-- Front Side -->
+                <div class="backface-hidden absolute inset-0 p-6 sm:p-8 flex flex-col justify-between rounded-2xl bg-white">
+                    <div class="flex justify-between items-center">
+                        <span id="frontLanguageLabel" class="text-xs font-bold uppercase tracking-wider text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-md">Vietnamese</span>
+                        <div class="flex items-center gap-2">
+                            <span id="frontAudioStatus" class="text-xs text-amber-600 font-medium hidden"></span>
+                            <button id="audioBtnFront" title="Listen Pronunciation" class="p-2 rounded-full text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="text-center my-auto py-6">
+                        <p id="frontText" class="text-2xl sm:text-3xl font-bold text-slate-800 leading-relaxed"></p>
+                    </div>
+
+                    <div class="text-center">
+                        <span class="text-xs text-slate-400 font-medium">Click anywhere or press Space to Flip</span>
+                    </div>
+                </div>
+
+                <!-- Back Side -->
+                <div class="backface-hidden rotate-y-180 absolute inset-0 p-6 sm:p-8 flex flex-col justify-between rounded-2xl bg-slate-900 text-white">
+                    <div class="flex justify-between items-center">
+                        <span id="backLanguageLabel" class="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-slate-800 px-2.5 py-1 rounded-md">English</span>
+                        <div class="flex items-center gap-2">
+                            <span id="backAudioStatus" class="text-xs text-amber-400 font-medium hidden"></span>
+                            <button id="audioBtnBack" title="Listen Pronunciation" class="p-2 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-colors hidden">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="text-center my-auto py-6">
+                        <p id="backText" class="text-xl sm:text-2xl font-semibold leading-relaxed text-slate-100"></p>
+                    </div>
+
+                    <div class="text-center">
+                        <span class="text-xs text-slate-500 font-medium">Rate your recall below</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Complete Screen -->
+        <div id="completionScreen" class="hidden w-full bg-white rounded-2xl p-8 sm:p-12 border border-slate-100 shadow-xl text-center my-auto animate-celebrate">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                🎉
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Session Complete!</h2>
+            <p class="text-slate-600 mb-6 max-w-md mx-auto">Great job! You have completed all remaining cards in this deck.</p>
+            <div class="flex flex-wrap justify-center gap-3">
+                <button id="restartSessionBtn" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-emerald-200">
+                    Restart Study Session
+                </button>
+                <button id="completionSaveBtn" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-indigo-200">
+                    💾 Save Updated TSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Study Action Rating Buttons -->
+        <div id="actionButtons" class="w-full grid grid-cols-3 gap-3 mt-6">
+            <button id="againBtn" class="py-3.5 px-3 rounded-xl font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all flex items-center justify-center gap-1.5 shadow-sm text-sm sm:text-base">
+                <span>🔄</span> Again (1)
+            </button>
+            <button id="goodBtn" class="py-3.5 px-3 rounded-xl font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center justify-center gap-1.5 shadow-sm text-sm sm:text-base">
+                <span>✅</span> Good (2)
+            </button>
+            <button id="deleteBtn" class="py-3.5 px-3 rounded-xl font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all flex items-center justify-center gap-1.5 shadow-sm text-sm sm:text-base" title="Remove card permanently from current TSV">
+                <span>🗑️</span> Delete (3)
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Import Modal -->
+    <div id="importModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 my-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-900">Import Vocabulary Deck</h3>
+                <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 text-xl font-bold">×</button>
+            </div>
+
+            <!-- TSV File Upload OR Paste TSV Text -->
+            <div class="mb-4">
+                <label class="text-sm font-bold text-slate-800 block mb-1">
+                    <span>📄</span> Load TSV Data (File or Paste)
+                </label>
+                <p class="text-xs text-slate-500 mb-2">
+                    Columns: <code>Vietnamese [tab] English [tab] audio/filename.mp3</code> (or just filename.mp3)
+                </p>
+                
+                <div class="mb-2.5">
+                    <input type="file" id="tsvFileInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="block w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-white hover:file:bg-slate-800 cursor-pointer">
+                </div>
+
+                <textarea id="tsvInput" class="w-full h-44 p-3 text-xs sm:text-sm font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Xin chào	Hello	audio/xin_chao.mp3
+Cảm ơn	Thank you	audio/cam_on.mp3"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-3">
+                <button id="cancelImportBtn" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                <button id="saveImportBtn" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm">Load Deck</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="max-w-2xl mx-auto w-full text-center text-xs text-slate-400 mt-6">
+        Shortcuts: <kbd class="px-1.5 py-0.5 bg-slate-100 border rounded text-slate-600 font-mono">Space</kbd> Flip | 
+        <kbd class="px-1.5 py-0.5 bg-slate-100 border rounded text-slate-600 font-mono">1</kbd> Again | 
+        <kbd class="px-1.5 py-0.5 bg-slate-100 border rounded text-slate-600 font-mono">2</kbd> Good | 
+        <kbd class="px-1.5 py-0.5 bg-slate-100 border rounded text-slate-600 font-mono">3</kbd> Delete
+    </footer>
+
+    <script>
+        const DEFAULT_VOCABULARY = [
+            { vietnamese: "Xin chào", english: "Hello", audioFile: "" },
+            { vietnamese: "Cảm ơn", english: "Thank you", audioFile: "" }
+        ];
+
+        // LocalStorage Keys
+        const STORAGE_KEY = 'vn_flashcard_cloud_prefs_v1';
+
+        // State variables
+        let fullDeck = [...DEFAULT_VOCABULARY];
+        let activeQueue = [...DEFAULT_VOCABULARY];
+        let currentCardIndex = 0;
+        let isFlipped = false;
+        let isVnToEn = true; 
+        let learnedCount = 0;
+        let availableVoices = [];
+        let deletedCount = 0;
+
+        let activeAudioElement = null;
+        let playbackTimers = [];
+
+        // User Preferences (persisted in localStorage)
+        let prefs = {
+            autoPlay: false,
+            initialDelayMs: 0,
+            repeatCount: 1,
+            betweenDelayMs: 500
+        };
+
+        // DOM Elements
+        const cardContainer = document.getElementById('cardContainer');
+        const cardInner = document.getElementById('cardInner');
+        const frontText = document.getElementById('frontText');
+        const backText = document.getElementById('backText');
+        const frontLanguageLabel = document.getElementById('frontLanguageLabel');
+        const backLanguageLabel = document.getElementById('backLanguageLabel');
+        const deckStatusText = document.getElementById('deckStatusText');
+        const learnedStatusText = document.getElementById('learnedStatusText');
+        const progressBar = document.getElementById('progressBar');
+        const modeVnEn = document.getElementById('modeVnEn');
+        const modeEnVn = document.getElementById('modeEnVn');
+        const actionButtons = document.getElementById('actionButtons');
+        const completionScreen = document.getElementById('completionScreen');
+        const resetBtn = document.getElementById('resetBtn');
+        const shuffleBtn = document.getElementById('shuffleBtn');
+        const saveTsvBtn = document.getElementById('saveTsvBtn');
+        const completionSaveBtn = document.getElementById('completionSaveBtn');
+        const restartSessionBtn = document.getElementById('restartSessionBtn');
+        const audioBtnFront = document.getElementById('audioBtnFront');
+        const audioBtnBack = document.getElementById('audioBtnBack');
+        const frontAudioStatus = document.getElementById('frontAudioStatus');
+        const backAudioStatus = document.getElementById('backAudioStatus');
+
+        // Audio Settings DOM
+        const audioSettingsToggleBtn = document.getElementById('audioSettingsToggleBtn');
+        const audioSettingsPanel = document.getElementById('audioSettingsPanel');
+        const autoPlayToggle = document.getElementById('autoPlayToggle');
+        const repeatCountInput = document.getElementById('repeatCountInput');
+        const initialDelayRange = document.getElementById('initialDelayRange');
+        const initialDelayLabel = document.getElementById('initialDelayLabel');
+        const betweenDelayRange = document.getElementById('betweenDelayRange');
+        const betweenDelayLabel = document.getElementById('betweenDelayLabel');
+        
+        // Modal DOM
+        const importBtn = document.getElementById('importBtn');
+        const importModal = document.getElementById('importModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const cancelImportBtn = document.getElementById('cancelImportBtn');
+        const saveImportBtn = document.getElementById('saveImportBtn');
+        const tsvInput = document.getElementById('tsvInput');
+        const tsvFileInput = document.getElementById('tsvFileInput');
+
+        // --- Persistence Helpers ---
+        function loadPreferences() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    prefs = { ...prefs, ...parsed };
+                }
+            } catch (e) {
+                console.warn('Could not load saved preferences:', e);
+            }
+
+            autoPlayToggle.checked = prefs.autoPlay;
+            repeatCountInput.value = prefs.repeatCount;
+            initialDelayRange.value = prefs.initialDelayMs;
+            initialDelayLabel.textContent = `${prefs.initialDelayMs} ms`;
+            betweenDelayRange.value = prefs.betweenDelayMs;
+            betweenDelayLabel.textContent = `${prefs.betweenDelayMs} ms`;
+        }
+
+        function savePreferences() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+            } catch (e) {
+                console.warn('Could not save preferences:', e);
+            }
+        }
+
+        // --- Speech Synthesis Fallback ---
+        function initVoices() {
+            if ('speechSynthesis' in window) {
+                availableVoices = window.speechSynthesis.getVoices();
+            }
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = initVoices;
+            initVoices();
+        }
+
+        // --- Audio Playback Engine ---
+        function stopAllAudio() {
+            playbackTimers.forEach(id => clearTimeout(id));
+            playbackTimers = [];
+
+            if (activeAudioElement) {
+                activeAudioElement.pause();
+                activeAudioElement.currentTime = 0;
+                activeAudioElement = null;
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        function isVietnameseCurrentlyVisible() {
+            if (activeQueue.length === 0) return false;
+            return (isVnToEn && !isFlipped) || (!isVnToEn && isFlipped);
+        }
+
+        function showAudioFeedback(msg) {
+            const statusElem = isVnToEn ? frontAudioStatus : backAudioStatus;
+            statusElem.textContent = msg;
+            statusElem.classList.remove('hidden');
+            setTimeout(() => {
+                statusElem.classList.add('hidden');
+            }, 3000);
+        }
+
+        function playSingleInstance(card, onCompleteCallback) {
+            const rawFileName = (card.audioFile || '').trim();
+
+            if (rawFileName) {
+                let audioUrl = rawFileName;
+                if (!audioUrl.startsWith('http') && !audioUrl.startsWith('/')) {
+                    if (!audioUrl.startsWith('audio/')) {
+                        audioUrl = 'audio/' + audioUrl;
+                    }
+                }
+
+                const audio = new Audio(audioUrl);
+                activeAudioElement = audio;
+
+                audio.onended = () => {
+                    activeAudioElement = null;
+                    if (onCompleteCallback) onCompleteCallback();
+                };
+                audio.onerror = () => {
+                    activeAudioElement = null;
+                    playTTSFallback(card, onCompleteCallback);
+                };
+
+                audio.play().catch(err => {
+                    playTTSFallback(card, onCompleteCallback);
+                });
+                return;
+            }
+
+            playTTSFallback(card, onCompleteCallback);
+        }
+
+        function playTTSFallback(card, onCompleteCallback) {
+            if (!('speechSynthesis' in window)) {
+                showAudioFeedback("TTS unsupported.");
+                if (onCompleteCallback) onCompleteCallback();
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(card.vietnamese);
+            utterance.lang = 'vi-VN';
+            utterance.rate = 0.9;
+
+            const vnVoice = availableVoices.find(v => v.lang.startsWith('vi'));
+            if (vnVoice) {
+                utterance.voice = vnVoice;
+            }
+
+            utterance.onend = () => {
+                if (onCompleteCallback) onCompleteCallback();
+            };
+            utterance.onerror = () => {
+                if (onCompleteCallback) onCompleteCallback();
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function triggerAudioSequence(isAutoTriggered = false) {
+            stopAllAudio();
+
+            if (activeQueue.length === 0) return;
+            if (!isVietnameseCurrentlyVisible()) return;
+
+            const currentCard = activeQueue[currentCardIndex];
+            const totalPlays = Math.max(1, parseInt(prefs.repeatCount, 10) || 1);
+            const initialDelay = isAutoTriggered ? (parseInt(prefs.initialDelayMs, 10) || 0) : 0;
+            const betweenDelay = parseInt(prefs.betweenDelayMs, 10) || 0;
+
+            let playsRemaining = totalPlays;
+
+            function executePlayLoop() {
+                if (playsRemaining <= 0 || !isVietnameseCurrentlyVisible()) return;
+                playsRemaining--;
+
+                playSingleInstance(currentCard, () => {
+                    if (playsRemaining > 0 && isVietnameseCurrentlyVisible()) {
+                        const timerId = setTimeout(executePlayLoop, betweenDelay);
+                        playbackTimers.push(timerId);
+                    }
+                });
+            }
+
+            if (initialDelay > 0) {
+                const startTimer = setTimeout(executePlayLoop, initialDelay);
+                playbackTimers.push(startTimer);
+            } else {
+                executePlayLoop();
+            }
+        }
+
+        // --- Card Rendering & State Management ---
+        function renderCard() {
+            stopAllAudio();
+
+            if (activeQueue.length === 0) {
+                showCompletion();
+                return;
+            }
+
+            isFlipped = false;
+            cardInner.classList.remove('rotate-y-180');
+
+            const current = activeQueue[currentCardIndex];
+            
+            if (isVnToEn) {
+                frontText.textContent = current.vietnamese;
+                backText.textContent = current.english;
+                frontLanguageLabel.textContent = "Vietnamese";
+                backLanguageLabel.textContent = "English";
+                audioBtnFront.classList.remove('hidden');
+                audioBtnBack.classList.add('hidden');
+            } else {
+                frontText.textContent = current.english;
+                backText.textContent = current.vietnamese;
+                frontLanguageLabel.textContent = "English";
+                backLanguageLabel.textContent = "Vietnamese";
+                audioBtnFront.classList.add('hidden');
+                audioBtnBack.classList.remove('hidden');
+            }
+
+            updateProgress();
+
+            if (prefs.autoPlay && isVietnameseCurrentlyVisible()) {
+                triggerAudioSequence(true);
+            }
+        }
+
+        function updateProgress() {
+            const total = fullDeck.length;
+            if (total === 0) {
+                deckStatusText.textContent = `Deck Empty (0 cards)`;
+                learnedStatusText.textContent = `Deleted: ${deletedCount}`;
+                progressBar.style.width = `100%`;
+                return;
+            }
+
+            learnedCount = total - activeQueue.length;
+            const delSuffix = deletedCount > 0 ? ` • Deleted: ${deletedCount}` : '';
+            
+            deckStatusText.textContent = `Card ${currentCardIndex + 1} of ${activeQueue.length}`;
+            learnedStatusText.textContent = `Learned: ${learnedCount} / ${total}${delSuffix}`;
+            
+            const progressPercent = (learnedCount / total) * 100;
+            progressBar.style.width = `${progressPercent}%`;
+        }
+
+        function flipCard() {
+            if (activeQueue.length === 0) return;
+
+            isFlipped = !isFlipped;
+            if (isFlipped) {
+                cardInner.classList.add('rotate-y-180');
+            } else {
+                cardInner.classList.remove('rotate-y-180');
+            }
+
+            stopAllAudio();
+            if (prefs.autoPlay && isVietnameseCurrentlyVisible()) {
+                triggerAudioSequence(true);
+            }
+        }
+
+        function handleRating(rating) {
+            if (activeQueue.length === 0) return;
+            stopAllAudio();
+
+            const currentCard = activeQueue[currentCardIndex];
+
+            if (rating === 'good') {
+                activeQueue.splice(currentCardIndex, 1);
+                if (currentCardIndex >= activeQueue.length) {
+                    currentCardIndex = 0;
+                }
+            } else if (rating === 'again') {
+                currentCardIndex = (currentCardIndex + 1) % activeQueue.length;
+            } else if (rating === 'delete') {
+                activeQueue.splice(currentCardIndex, 1);
+                const fullIdx = fullDeck.indexOf(currentCard);
+                if (fullIdx !== -1) {
+                    fullDeck.splice(fullIdx, 1);
+                }
+                deletedCount++;
+
+                if (currentCardIndex >= activeQueue.length) {
+                    currentCardIndex = 0;
+                }
+            }
+
+            renderCard();
+        }
+
+        function showCompletion() {
+            stopAllAudio();
+            cardContainer.classList.add('hidden');
+            actionButtons.classList.add('hidden');
+            completionScreen.classList.remove('hidden');
+            deckStatusText.textContent = `Completed!`;
+            const delSuffix = deletedCount > 0 ? ` • Deleted: ${deletedCount}` : '';
+            learnedStatusText.textContent = `Remaining in Deck: ${fullDeck.length}${delSuffix}`;
+            progressBar.style.width = `100%`;
+        }
+
+        function resetSession() {
+            stopAllAudio();
+            if (fullDeck.length === 0) {
+                alert("All cards in this deck were deleted. Import a new TSV or reload the page.");
+                return;
+            }
+            activeQueue = [...fullDeck];
+            currentCardIndex = 0;
+            cardContainer.classList.remove('hidden');
+            actionButtons.classList.remove('hidden');
+            completionScreen.classList.add('hidden');
+            renderCard();
+        }
+
+        function shuffleDeck() {
+            if (activeQueue.length <= 1) return;
+            stopAllAudio();
+            
+            for (let i = activeQueue.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [activeQueue[i], activeQueue[j]] = [activeQueue[j], activeQueue[i]];
+            }
+            
+            currentCardIndex = 0;
+            renderCard();
+        }
+
+        // --- TSV Parsing & Timestamped Exporting ---
+        function parseTSV(text) {
+            const lines = text.trim().split(/\r?\n/);
+            const newDeck = [];
+            
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                const parts = line.split('\t');
+                if (parts.length >= 2) {
+                    const vn = parts[0].trim();
+                    const en = parts[1].trim();
+                    const audioFile = parts.length >= 3 ? parts[2].trim() : '';
+                    if (vn && en) {
+                        newDeck.push({ 
+                            vietnamese: vn, 
+                            english: en, 
+                            audioFile: audioFile 
+                        });
+                    }
+                }
+            });
+
+            return newDeck;
+        }
+
+        function exportTimestampedTSV() {
+            if (fullDeck.length === 0) {
+                alert("The deck is currently empty—nothing to export.");
+                return;
+            }
+
+            const tsvLines = fullDeck.map(card => {
+                if (card.audioFile) {
+                    return `${card.vietnamese}\t${card.english}\t${card.audioFile}`;
+                }
+                return `${card.vietnamese}\t${card.english}`;
+            });
+
+            const content = tsvLines.join('\n');
+            const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+            const filename = `vietnamese_vocab_${timestamp}.tsv`;
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // --- Event Listeners ---
+
+        audioSettingsToggleBtn.addEventListener('click', () => {
+            audioSettingsPanel.classList.toggle('hidden');
+        });
+
+        autoPlayToggle.addEventListener('change', (e) => {
+            prefs.autoPlay = e.target.checked;
+            savePreferences();
+            if (prefs.autoPlay && isVietnameseCurrentlyVisible()) {
+                triggerAudioSequence(true);
+            } else if (!prefs.autoPlay) {
+                stopAllAudio();
+            }
+        });
+
+        repeatCountInput.addEventListener('change', (e) => {
+            let val = parseInt(e.target.value, 10);
+            if (isNaN(val) || val < 1) val = 1;
+            if (val > 10) val = 10;
+            e.target.value = val;
+            prefs.repeatCount = val;
+            savePreferences();
+        });
+
+        initialDelayRange.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            prefs.initialDelayMs = val;
+            initialDelayLabel.textContent = `${val} ms`;
+            savePreferences();
+        });
+
+        betweenDelayRange.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            prefs.betweenDelayMs = val;
+            betweenDelayLabel.textContent = `${val} ms`;
+            savePreferences();
+        });
+
+        cardContainer.addEventListener('click', (e) => {
+            if (e.target.closest('#audioBtnFront') || e.target.closest('#audioBtnBack')) return;
+            flipCard();
+        });
+
+        audioBtnFront.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isVnToEn && !isFlipped) {
+                triggerAudioSequence(false);
+            }
+        });
+
+        audioBtnBack.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!isVnToEn && isFlipped) {
+                triggerAudioSequence(false);
+            }
+        });
+
+        document.getElementById('againBtn').addEventListener('click', () => handleRating('again'));
+        document.getElementById('goodBtn').addEventListener('click', () => handleRating('good'));
+        document.getElementById('deleteBtn').addEventListener('click', () => handleRating('delete'));
+        
+        resetBtn.addEventListener('click', resetSession);
+        shuffleBtn.addEventListener('click', shuffleDeck);
+        restartSessionBtn.addEventListener('click', resetSession);
+        saveTsvBtn.addEventListener('click', exportTimestampedTSV);
+        completionSaveBtn.addEventListener('click', exportTimestampedTSV);
+
+        modeVnEn.addEventListener('click', () => {
+            if (isVnToEn) return;
+            isVnToEn = true;
+            modeVnEn.className = "px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white transition-all shadow-sm";
+            modeEnVn.className = "px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition-all";
+            renderCard();
+        });
+
+        modeEnVn.addEventListener('click', () => {
+            if (!isVnToEn) return;
+            isVnToEn = false;
+            modeEnVn.className = "px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white transition-all shadow-sm";
+            modeVnEn.className = "px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition-all";
+            renderCard();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!importModal.classList.contains('hidden')) return;
+            if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+            
+            if (e.code === 'Space') {
+                e.preventDefault();
+                flipCard();
+            } else if (e.key === '1') {
+                handleRating('again');
+            } else if (e.key === '2') {
+                handleRating('good');
+            } else if (e.key === '3') {
+                handleRating('delete');
+            }
+        });
+
+        importBtn.addEventListener('click', () => importModal.classList.remove('hidden'));
+        closeModalBtn.addEventListener('click', () => importModal.classList.add('hidden'));
+        cancelImportBtn.addEventListener('click', () => importModal.classList.add('hidden'));
+
+        tsvFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                tsvInput.value = event.target.result;
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+
+        // Confirm Import & Auto-Close Modal
+        saveImportBtn.addEventListener('click', () => {
+            const rawText = tsvInput.value;
+            const parsed = parseTSV(rawText);
+            if (parsed.length > 0) {
+                fullDeck = parsed;
+                deletedCount = 0;
+                importModal.classList.add('hidden'); // Modal closes immediately
+                tsvInput.value = '';
+                tsvFileInput.value = '';
+                resetSession();
+            } else {
+                alert('Could not parse tab-separated vocabulary. Make sure each line has at least Vietnamese and English separated by a TAB character.');
+            }
+        });
+
+        window.onload = function() {
+            loadPreferences();
+            renderCard();
+        };
+    </script>
+</body>
+</html>
